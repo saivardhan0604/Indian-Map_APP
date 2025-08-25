@@ -8,8 +8,6 @@
   <style>
     html,body { height:100%; margin:0; padding:0; }
     body { background:#071423; font-family:system-ui, -apple-system, "Segoe UI", Roboto, Arial; color:#e6f7fb; }
-
-    /* Topbar with logo + lab name */
     #topbar {
       position: fixed;
       left: 0;
@@ -24,15 +22,12 @@
       box-shadow: 0 2px 12px rgba(0,0,0,.45);
       font-family: "Segoe UI", Roboto, Arial, sans-serif;
     }
-
     #topbar .logo-wrap {
       display:flex;
       align-items:center;
       gap:16px;
       flex: 0 0 auto;
     }
-
-    /* image logo */
     #topbar .logo-wrap img {
       height:72px;
       width:auto;
@@ -41,10 +36,7 @@
       object-fit:contain;
       background:transparent;
     }
-
-    /* fallback inline SVG (hidden by default) */
     #svgLogo { display:none; height:72px; width:auto; }
-
     #topbar .title {
       display:flex;
       flex-direction:column;
@@ -68,8 +60,6 @@
       line-height:1.12;
       word-break: break-word;
     }
-
-    /* state label style (used for decluttered labels) */
     .state-label {
       display:inline-block;
       font-weight:700;
@@ -83,15 +73,9 @@
       transform: translate(-50%, -50%);
       pointer-events: none;
     }
-
-    /* district tooltip */
     .district-tooltip { background: rgba(255,255,255,0.95); color:#022; padding:5px 8px; border-radius:6px; border:1px solid rgba(0,0,0,0.08); font-size:12px; }
-
-    /* map container placed below topbar */
     #map { position: absolute; top: 110px; left:0; right:0; bottom:0; }
-
     .leaflet-container { background:#071423; }
-
     @media (max-width:900px) {
       #topbar { height:120px; padding:10px 12px; }
       #topbar .logo-wrap img, #svgLogo { height:64px; }
@@ -104,16 +88,10 @@
 <body>
   <div id="topbar" role="banner" aria-label="SPIRE LAB header">
     <div class="logo-wrap" aria-hidden="false">
-      <!-- Prefer remote official SPIRE logo. If you want offline, download and use assets/spire-logo.png -->
       <img id="logoImg"
            src="https://spire.ee.iisc.ac.in/assets/images/Public/spire_logo.png"
            alt="SPIRE LAB logo (Prasanta Ghosh)"
            onerror="this.style.display='none'; document.getElementById('svgLogo').style.display='block'">
-
-      <!-- show local image if remote used fails; if you put a local file, change src accordingly -->
-      <!-- <img src="assets/spire-logo.png" alt="SPIRE Lab logo local" style="display:none;"> -->
-
-      <!-- Inline SVG fallback in case remote image can't load -->
       <svg id="svgLogo" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <defs>
           <linearGradient id="g1" x1="0" x2="1" y1="0" y2="1">
@@ -129,36 +107,28 @@
         </g>
       </svg>
     </div>
-
     <div class="title" role="heading" aria-level="1">
       <div class="main">SPIRE LAB</div>
       <div class="sub">Signal Processing Interpretation and REpresentation LABoratory — Prof. Prasanta Kumar Ghosh</div>
     </div>
   </div>
-
   <div id="map"></div>
-
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/topojson-client@3/dist/topojson-client.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-
   <script>
   (async function(){
-    // ---------- CONFIG ----------
     const TOPOJSON_PATH = './topojson/india.json';
     const GEOJSON_PATH  = './geojson/india.geojson';
     const LABEL_MIN_ZOOM = 5.6;
     const LABEL_MAX_ZOOM = 7.6;
     const SHOW_DISTRICT_ZOOM = 8.0;
     const MIN_LABEL_SEPARATION_PX = 60;
-    // ----------------------------
 
     function setInfo(msg){ console.log('[map] ' + msg); }
 
-    // map (no tile layer)
     const map = L.map('map', { zoomControl:true, minZoom:4, maxZoom:12, preferCanvas:true }).setView([22,79], 5);
 
-    // data containers
     let indiaFC = null, mergedStatesFC = null, statesLayer = null;
     let centroidList = [], labelMarkers = [], currentDistrictLayer = null;
     let stateBuckets = {}, stateKey = null, activeStateName = null;
@@ -361,7 +331,6 @@
       }, 160);
     }
 
-    // ---------- init ----------
     try {
       setInfo('Loading India geometry (topo/geo)…');
       indiaFC = await loadIndiaFile();
@@ -378,7 +347,6 @@
       setInfo('Rendering merged states & computing centroids…');
       renderStatesAndCentroids(mergedStatesFC);
 
-      // clamp map to India bounds
       const bounds = statesLayer.getBounds();
       if (bounds && bounds.isValid()) {
         map.fitBounds(bounds.pad(0.02));
