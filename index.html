@@ -1,0 +1,402 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>SPIRE LAB — India Map (States → Districts)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    html,body { height:100%; margin:0; padding:0; }
+    body { background:#071423; font-family:system-ui, -apple-system, "Segoe UI", Roboto, Arial; color:#e6f7fb; }
+
+    /* Topbar with logo + lab name */
+    #topbar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 110px;
+      z-index: 1400;
+      display: flex;
+      align-items: center;
+      padding: 12px 22px;
+      background: linear-gradient(180deg,#051220,#072031);
+      box-shadow: 0 2px 12px rgba(0,0,0,.45);
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+    }
+
+    #topbar .logo-wrap {
+      display:flex;
+      align-items:center;
+      gap:16px;
+      flex: 0 0 auto;
+    }
+
+    /* image logo */
+    #topbar .logo-wrap img {
+      height:72px;
+      width:auto;
+      display:block;
+      border-radius:4px;
+      object-fit:contain;
+      background:transparent;
+    }
+
+    /* fallback inline SVG (hidden by default) */
+    #svgLogo { display:none; height:72px; width:auto; }
+
+    #topbar .title {
+      display:flex;
+      flex-direction:column;
+      line-height:1.05;
+      margin-left:6px;
+      overflow:visible;
+    }
+    #topbar .title .main {
+      font-size:30px;
+      font-weight:800;
+      color:#ff6a2b;
+      letter-spacing:1px;
+    }
+    #topbar .title .sub {
+      margin-top:6px;
+      font-size:16px;
+      color:#d7eef6;
+      font-weight:600;
+      max-width: calc(100vw - 240px);
+      white-space: normal;
+      line-height:1.12;
+      word-break: break-word;
+    }
+
+    /* state label style (used for decluttered labels) */
+    .state-label {
+      display:inline-block;
+      font-weight:700;
+      color:#052c33;
+      background:#a8f2ffcc;
+      padding:4px 8px;
+      border-radius:8px;
+      box-shadow:0 4px 10px rgba(0,0,0,.35);
+      white-space:nowrap;
+      font-size:13px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    /* district tooltip */
+    .district-tooltip { background: rgba(255,255,255,0.95); color:#022; padding:5px 8px; border-radius:6px; border:1px solid rgba(0,0,0,0.08); font-size:12px; }
+
+    /* map container placed below topbar */
+    #map { position: absolute; top: 110px; left:0; right:0; bottom:0; }
+
+    .leaflet-container { background:#071423; }
+
+    @media (max-width:900px) {
+      #topbar { height:120px; padding:10px 12px; }
+      #topbar .logo-wrap img, #svgLogo { height:64px; }
+      #topbar .title .main { font-size:24px; }
+      #topbar .title .sub { font-size:14px; max-width:calc(100vw - 160px); }
+      #map { top: 120px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="topbar" role="banner" aria-label="SPIRE LAB header">
+    <div class="logo-wrap" aria-hidden="false">
+      <!-- Prefer remote official SPIRE logo. If you want offline, download and use assets/spire-logo.png -->
+      <img id="logoImg"
+           src="https://spire.ee.iisc.ac.in/assets/images/Public/spire_logo.png"
+           alt="SPIRE LAB logo (Prasanta Ghosh)"
+           onerror="this.style.display='none'; document.getElementById('svgLogo').style.display='block'">
+
+      <!-- show local image if remote used fails; if you put a local file, change src accordingly -->
+      <!-- <img src="assets/spire-logo.png" alt="SPIRE Lab logo local" style="display:none;"> -->
+
+      <!-- Inline SVG fallback in case remote image can't load -->
+      <svg id="svgLogo" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="g1" x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0%" stop-color="#ff9c2e"/>
+            <stop offset="60%" stop-color="#d85b16"/>
+            <stop offset="100%" stop-color="#722000"/>
+          </linearGradient>
+        </defs>
+        <g transform="translate(100,100) scale(0.9)">
+          <path d="M0,-90 C25,-60 40,-10 45,45 C30,40 10,20 -5,5 C-20,20 -40,40 -55,45 C-50,-10 -35,-60 0,-90 Z"
+                fill="url(#g1)" stroke="#5b1e00" stroke-opacity="0.6" stroke-width="0.8"/>
+          <ellipse cx="0" cy="60" rx="55" ry="15" fill="#7a2800" opacity="0.65"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="title" role="heading" aria-level="1">
+      <div class="main">SPIRE LAB</div>
+      <div class="sub">Signal Processing Interpretation and REpresentation LABoratory — Prof. Prasanta Kumar Ghosh</div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/topojson-client@3/dist/topojson-client.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
+  <script>
+  (async function(){
+    // ---------- CONFIG ----------
+    const TOPOJSON_PATH = './topojson/india.json';
+    const GEOJSON_PATH  = './geojson/india.geojson';
+    const LABEL_MIN_ZOOM = 5.6;
+    const LABEL_MAX_ZOOM = 7.6;
+    const SHOW_DISTRICT_ZOOM = 8.0;
+    const MIN_LABEL_SEPARATION_PX = 60;
+    // ----------------------------
+
+    function setInfo(msg){ console.log('[map] ' + msg); }
+
+    // map (no tile layer)
+    const map = L.map('map', { zoomControl:true, minZoom:4, maxZoom:12, preferCanvas:true }).setView([22,79], 5);
+
+    // data containers
+    let indiaFC = null, mergedStatesFC = null, statesLayer = null;
+    let centroidList = [], labelMarkers = [], currentDistrictLayer = null;
+    let stateBuckets = {}, stateKey = null, activeStateName = null;
+
+    async function loadIndiaFile(){
+      const tries = [TOPOJSON_PATH, GEOJSON_PATH];
+      for (const p of tries) {
+        try {
+          const res = await fetch(p);
+          if (!res.ok) throw new Error('not found');
+          const j = await res.json();
+          if (j.type === 'Topology' || j.objects) {
+            const k = Object.keys(j.objects)[0];
+            return topojson.feature(j, j.objects[k]);
+          } else return j;
+        } catch(e) {}
+      }
+      throw new Error('India file not found. Place topojson/india.json or geojson/india.geojson in project.');
+    }
+
+    function detectStateProperty(features) {
+      const sample = features.slice(0, Math.min(1500, features.length));
+      const counts = {};
+      sample.forEach(f => {
+        const p = f.properties || {};
+        Object.keys(p).forEach(k => {
+          if (p[k] != null) {
+            counts[k] = counts[k] || new Set();
+            counts[k].add(String(p[k]).trim());
+          }
+        });
+      });
+      let best = null;
+      for (const k of Object.keys(counts)) {
+        const n = counts[k].size;
+        if (n >= 10 && n <= 50) {
+          if (!best) best = k;
+          else if (Math.abs(n-36) < Math.abs(counts[best].size - 36)) best = k;
+        }
+      }
+      if (!best) {
+        const cand = ['st_nm','STATE','state','ST_NAME','ST_NM','STATE_NAME','stname'];
+        for (const c of cand) if (counts[c]) { best = c; break; }
+      }
+      return best || Object.keys(sample[0]?.properties || {})[0] || null;
+    }
+
+    function buildBuckets(features, key) {
+      const buckets = {};
+      features.forEach(f => {
+        const name = String((f.properties && f.properties[key]) || 'Unknown').trim();
+        buckets[name] = buckets[name] || [];
+        buckets[name].push(f);
+      });
+      return buckets;
+    }
+
+    function mergePairwise(features) {
+      if (!features || features.length === 0) return null;
+      const simple = features.map(f => { try { return turf.simplify(f, { tolerance:0.0015, highQuality:false }); } catch { return f; } });
+      let queue = simple.slice();
+      while (queue.length > 1) {
+        const a = queue.shift(), b = queue.shift();
+        try {
+          const merged = turf.union(a,b) || a;
+          try { queue.push(turf.simplify(merged, { tolerance:0.0018, highQuality:false })); } catch { queue.push(merged); }
+        } catch(e) {
+          try { queue.push(turf.buffer(a,0)||a); queue.push(turf.buffer(b,0)||b); } catch { queue.push(a); queue.push(b); }
+        }
+        if (queue.length > 60) queue = queue.map(x => { try { return turf.simplify(x,{tolerance:0.0022,highQuality:false}); } catch { return x; } });
+      }
+      try { return turf.simplify(queue[0], { tolerance:0.0025, highQuality:false }); } catch { return queue[0]; }
+    }
+
+    async function buildMergedStates(buckets) {
+      const names = Object.keys(buckets).sort();
+      const merged = [];
+      let i = 0;
+      for (const name of names) {
+        i++;
+        setInfo(`Merging ${i}/${names.length}: ${name}`);
+        const feats = buckets[name];
+        const mergedFeat = mergePairwise(feats) || feats[0];
+        mergedFeat.properties = mergedFeat.properties || {};
+        mergedFeat.properties._stateName = name;
+        merged.push(mergedFeat);
+        await new Promise(r => setTimeout(r, 20));
+      }
+      setInfo('Merged all states.');
+      return turf.featureCollection(merged);
+    }
+
+    function renderStatesAndCentroids(statesFC) {
+      if (statesLayer) map.removeLayer(statesLayer);
+      statesLayer = L.geoJSON(statesFC, {
+        style: { weight:1.0, color:'#032b3a', fillColor:'#0ab7e0', fillOpacity:0.95 },
+        onEachFeature: (feature, layer) => {
+          layer.on({
+            mouseover: () => layer.setStyle({ weight:2.2, color:'#001f3f', fillColor:'#79eeff', fillOpacity:0.98 }),
+            mouseout: () => statesLayer.resetStyle(layer),
+            click: () => {
+              const nm = feature.properties && (feature.properties._stateName || feature.properties[stateKey]) || 'State';
+              const bounds = layer.getBounds();
+              if (bounds && bounds.isValid()) map.fitBounds(bounds.pad(0.03), { maxZoom: 10 });
+              drawStateDistricts(nm);
+            }
+          });
+        }
+      }).addTo(map);
+
+      centroidList = [];
+      statesFC.features.forEach(f => {
+        try {
+          const c = turf.centroid(f).geometry.coordinates;
+          centroidList.push({ name: f.properties._stateName, lat: c[1], lng: c[0] });
+        } catch(e){}
+      });
+    }
+
+    function updateLabels() {
+      labelMarkers.forEach(m => map.removeLayer(m));
+      labelMarkers = [];
+
+      const z = map.getZoom();
+      if (z < LABEL_MIN_ZOOM || z > LABEL_MAX_ZOOM) return;
+      if (currentDistrictLayer) return;
+
+      const placed = [];
+      centroidList.forEach(c => {
+        const ll = L.latLng(c.lat, c.lng);
+        if (!map.getBounds().contains(ll)) return;
+        const p = map.latLngToLayerPoint(ll);
+        const tooClose = placed.some(q => {
+          const dx = q.x - p.x, dy = q.y - p.y;
+          return (dx*dx + dy*dy) < (MIN_LABEL_SEPARATION_PX * MIN_LABEL_SEPARATION_PX);
+        });
+        if (tooClose) return;
+        const icon = L.divIcon({ className: '', html: `<div class="state-label">${c.name}</div>`, iconSize: null });
+        const marker = L.marker(ll, { icon: icon, interactive:false, zIndexOffset:6000 });
+        marker.addTo(map);
+        labelMarkers.push(marker);
+        placed.push(p);
+      });
+    }
+
+    function findStateContainingPoint(pt) {
+      if (!mergedStatesFC) return null;
+      for (const f of mergedStatesFC.features) {
+        try {
+          if (turf.booleanPointInPolygon(pt, f)) return f.properties._stateName;
+        } catch(e){}
+      }
+      return null;
+    }
+
+    function drawStateDistricts(stateName) {
+      if (!stateBuckets[stateName] || !stateBuckets[stateName].length) { setInfo('No districts for ' + stateName); return; }
+      if (activeStateName === stateName && currentDistrictLayer) return;
+      if (currentDistrictLayer) { map.removeLayer(currentDistrictLayer); currentDistrictLayer = null; }
+      activeStateName = stateName;
+      const fc = turf.featureCollection(stateBuckets[stateName]);
+      currentDistrictLayer = L.geoJSON(fc, {
+        style: { weight:0.9, color:'#023b4a', fillColor:'#0ab7e0', fillOpacity:0.85 },
+        onEachFeature: (feature, layer) => {
+          const p = feature.properties || {};
+          const dname = p.district || p.DISTRICT || p.NAME || p.name || 'District';
+          layer.bindTooltip(dname, { className:'district-tooltip', direction:'center', sticky:false });
+          layer.on({
+            mouseover: ()=> layer.setStyle({ weight:1.6, color:'#001f3f', fillOpacity:0.98 }),
+            mouseout: ()=> currentDistrictLayer.resetStyle(layer)
+          });
+        },
+        preferCanvas: true
+      }).addTo(map);
+      labelMarkers.forEach(m => map.removeLayer(m));
+      setInfo('Showing districts for ' + stateName);
+      if (map.getZoom() < SHOW_DISTRICT_ZOOM) currentDistrictLayer.setStyle({ opacity:0, fillOpacity:0 });
+    }
+
+    function hideDistricts() {
+      if (currentDistrictLayer) { map.removeLayer(currentDistrictLayer); currentDistrictLayer = null; }
+      activeStateName = null;
+      updateLabels();
+    }
+
+    let zoomTimer = null;
+    function onZoomOrMove() {
+      clearTimeout(zoomTimer);
+      zoomTimer = setTimeout(() => {
+        const z = map.getZoom();
+        if (z >= SHOW_DISTRICT_ZOOM) {
+          const c = map.getCenter();
+          const pt = turf.point([c.lng, c.lat]);
+          const state = findStateContainingPoint(pt);
+          if (state) drawStateDistricts(state);
+        } else {
+          hideDistricts();
+        }
+        updateLabels();
+      }, 160);
+    }
+
+    // ---------- init ----------
+    try {
+      setInfo('Loading India geometry (topo/geo)…');
+      indiaFC = await loadIndiaFile();
+      const feats = indiaFC.features || [];
+      if (!feats.length) throw new Error('No features found in India file.');
+
+      setInfo('Detecting state property & grouping districts…');
+      stateKey = detectStateProperty(feats);
+      stateBuckets = buildBuckets(feats, stateKey);
+
+      setInfo('Merging districts into states (one-time; please wait)…');
+      mergedStatesFC = await buildMergedStates(stateBuckets);
+
+      setInfo('Rendering merged states & computing centroids…');
+      renderStatesAndCentroids(mergedStatesFC);
+
+      // clamp map to India bounds
+      const bounds = statesLayer.getBounds();
+      if (bounds && bounds.isValid()) {
+        map.fitBounds(bounds.pad(0.02));
+        map.setMaxBounds(bounds.pad(0.25));
+        map.options.maxBoundsViscosity = 1.0;
+      }
+
+      updateLabels();
+      map.on('zoomend', onZoomOrMove);
+      map.on('moveend', onZoomOrMove);
+
+      setInfo('Ready — states-only view; zoom into a state to auto-show its districts.');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to load India data. Open console for details.');
+      setInfo('Error loading India geometry.');
+    }
+  })();
+  </script>
+</body>
+</html>
